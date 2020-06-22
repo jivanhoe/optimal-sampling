@@ -1,20 +1,22 @@
-from typing import Union, Optional, Callable, Tuple
+from typing import Union, Optional, Callable, Tuple, NoReturn
 
 import numpy as np
-from sklearn.base import BaseEstimator
+from sklearn.base import ClassifierMixin
+from functools import wraps
 
 
 class OptimalSampler:
 
     def __init__(
             self,
-            clf: BaseEstimator,
+            clf: ClassifierMixin,
             loss: Callable[[np.ndarray, np.ndarray], np.ndarray],
             X: np.ndarray,
             y: np.ndarray,
             positive_weight: float = 1.0,
             negative_weight: float = 1.0,
             positive_class: Union[int, bool] = True,
+            negative_class: Union[int, bool] = False,
             max_iter: int = 10,
             termination_tol: float = 1e-2,
             use_oob_validation: bool = False
@@ -26,6 +28,7 @@ class OptimalSampler:
         self.positive_weight = positive_weight
         self.negative_weight = negative_weight
         self.positive_class = positive_class
+        self.negative_class = negative_class
         self.max_iter = max_iter
         self.termination_tol = termination_tol
         self.use_oob_validation = use_oob_validation
@@ -57,15 +60,20 @@ class OptimalSampler:
         mask = positive_mask | negative_mask
         return self.X[mask], self.y[mask]
 
-    def optimize(self):
-        prev_sampling_proba, sampling_proba = 1, np.mean(self.y == self.positive_class)
+    def optimize(self) -> float:
+        nominal_proba =  np.mean(self.y == self.positive_class)
+        prev_sampling_proba, sampling_proba = 1, nominal_proba
         for i in range(self.max_iter):
             X, y = self.sample(sampling_proba=sampling_proba, seed=i)
+            self.clf.class_weight = {
+                self.positive_class: self.positive_weight * nominal_proba / sampling_proba,
+                self.negative_class: self.negative_class * (1 - nominal_proba) / (1 - sampling_proba),
+            }
             self.clf.fit(X, y)
-            sampling_proba = self.get_optimal_sampling_proba()
+            prev_sampling_proba, sampling_proba = sampling_proba, self.get_optimal_sampling_proba()
             if abs(prev_sampling_proba - sampling_proba) < self.termination_tol:
                 break
-
+        self.clf.optimal_sampling_proba_ = sampling_proba
 
 
 
