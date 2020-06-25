@@ -9,16 +9,20 @@ from algorithm.optimal_sampling import OptimalSamplingClassifier
 
 
 def performance_summary(clf: OptimalSamplingClassifier, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
-    predicted_proba = clf.predict_proba(X)[:, 1]
+    predicted_proba = clf.predict_proba(X)
+    if clf.use_decision_function:
+        predicted_proba = (predicted_proba - predicted_proba.min()) / (predicted_proba.max() - predicted_proba.min())
     predicted = clf.predict(X)
+    nominal_proba = (y == clf.positive_class).mean()
     return dict(
         model=str(clf.estimator).replace("\n", "").replace(" ", ""),
-        class_ratio=1 / (y == clf.positive_class).mean(),
+        class_ratio=1 / nominal_proba,
         weight_ratio=clf.positive_weight / clf.negative_weight,
+        sampling_ratio=clf.sampling_proba / nominal_proba,
         accuracy=accuracy_score(y, predicted),
         sensitivity=sensitivity_score(y, predicted),
         specificity=specificity_score(y, predicted),
-        precision=precision_score(y, predicted),
+        precision=precision_score(y, predicted) if (predicted == clf.positive_class).sum() > 0 else None,
         f1_score=f1_score(y, predicted),
         geometric_mean_score=geometric_mean_score(y, predicted),
         roc_auc_score=roc_auc_score(y, predicted_proba),

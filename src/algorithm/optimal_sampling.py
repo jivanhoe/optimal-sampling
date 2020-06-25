@@ -19,7 +19,9 @@ class OptimalSamplingClassifier(BaseEstimator):
             max_iter: int = 10,
             termination_tol: float = 1e-2,
             tune_threshold: bool = True,
-            verbose: bool = False
+            use_decision_function: bool = False,
+            verbose: bool = False,
+            random_state: Optional[int] = None
     ):
         self.estimator = estimator
         self.loss = loss if loss else select_loss(type(estimator))
@@ -30,24 +32,23 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.max_iter = max_iter
         self.termination_tol = termination_tol
         self.tune_threshold = tune_threshold
+        self.use_decision_function = use_decision_function
         self.verbose = verbose
         self.sampling_proba = None
         self.threshold = None
+        self.random_state = random_state
 
     def resample_(
             self,
             X: np.ndarray,
             y: np.ndarray,
             sampling_proba: float,
-            seed: Optional[int] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
 
         # Select all positive samples
         positive_mask = y == self.positive_class
 
         # Select random subset of negative samples
-        if seed is not None:
-            np.random.seed(seed)
         n_samples = y.shape[0]
         n_negative_samples = int(
             np.ceil(n_samples * np.mean(positive_mask) / sampling_proba * (1 - sampling_proba)))
@@ -73,7 +74,7 @@ class OptimalSamplingClassifier(BaseEstimator):
         for i in range(self.max_iter):
             if self.verbose:
                 print(f"Training with sampling probability: {'{0:.3f}'.format(sampling_proba)}")
-            X_resampled, y_resampled = self.resample_(X, y, sampling_proba=sampling_proba, seed=0)
+            X_resampled, y_resampled = self.resample_(X, y, sampling_proba=sampling_proba)
             self.estimator.class_weight = {
                 self.positive_class: self.positive_weight * nominal_proba / sampling_proba,
                 self.negative_class: self.negative_weight * (1 - nominal_proba) / (1 - sampling_proba),
@@ -86,14 +87,14 @@ class OptimalSamplingClassifier(BaseEstimator):
 
     def tune_threshold_(self, X: np.ndarray, y: np.ndarray):
         nominal_proba = (y == self.positive_class).mean()
-        X_resampled, y_resampled = self.resample_(X, y, sampling_proba=self.sampling_proba, seed=0)
+        X_resampled, y_resampled = self.resample_(X, y, sampling_proba=self.sampling_proba)
         sampling_weights = np.where(
             y_resampled == self.positive_class,
             nominal_proba / self.sampling_proba,
             (1 - nominal_proba) / (1 - self.sampling_proba)
         )
         if self.tune_threshold:
-            predicted_proba = self.predict_proba(X_resampled)[:, 1]
+            predicted_proba = self.predict_proba(X_resampled)
             min_cost, best_threshold = np.inf, np.inf
             for threshold in np.unique(predicted_proba):
                 self.threshold = threshold
@@ -105,20 +106,24 @@ class OptimalSamplingClassifier(BaseEstimator):
         else:
             self.threshold = 0.5
 
-    def fit(self,  X: np.ndarray, y: np.ndarray) -> NoReturn:
+    def fit(self, X: np.ndarray, y: np.ndarray) -> NoReturn:
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
         self.fit_estimator_with_optimal_sampling_(X, y)
         self.tune_threshold_(X, y)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        return self.estimator.predict_proba(X)
+        if self.use_decision_function:
+            return self.estimator.decision_function(X)
+        else:
+            return self.estimator.predict_proba(X)[:, 1]
 
     def predict(self, X: np.ndarray) -> np.ndarray:
-        return np.where(self.predict_proba(X)[:, 1] > self.threshold, self.positive_class, self.negative_class)
+        return np.where(self.predict_proba(X) > self.threshold, self.positive_class, self.negative_class)
 
     def weighted_loss(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
-        predicted_proba = self.predict_proba(X)[:, 1]
         weights = np.where(y == self.positive_class, self.positive_weight, self.negative_weight)
-        return self.loss(y, predicted_proba) * weights
+        return self.loss(self.predict_proba(X), y=y) * weights
 
     def cost(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         predicted = self.predict(X)
