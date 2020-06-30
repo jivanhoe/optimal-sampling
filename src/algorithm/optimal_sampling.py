@@ -20,6 +20,7 @@ class OptimalSamplingClassifier(BaseEstimator):
             termination_tol: float = 1e-2,
             tune_threshold: bool = True,
             use_decision_function: bool = False,
+            calibrate_class_weight: bool = True,
             verbose: bool = False,
             random_state: Optional[int] = None
     ):
@@ -33,6 +34,7 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.termination_tol = termination_tol
         self.tune_threshold = tune_threshold
         self.use_decision_function = use_decision_function
+        self.calibrate_class_weight = calibrate_class_weight
         self.verbose = verbose
         self.sampling_proba = None
         self.threshold = None
@@ -75,10 +77,13 @@ class OptimalSamplingClassifier(BaseEstimator):
             if self.verbose:
                 print(f"Training with sampling probability: {'{0:.3f}'.format(sampling_proba)}")
             X_resampled, y_resampled = self.resample_(X, y, sampling_proba=sampling_proba)
-            self.estimator.class_weight = {
-                self.positive_class: self.positive_weight * nominal_proba / sampling_proba,
-                self.negative_class: self.negative_weight * (1 - nominal_proba) / (1 - sampling_proba),
-            }
+            if self.calibrate_class_weight:
+                self.estimator.class_weight = {
+                    self.positive_class: self.positive_weight * nominal_proba / sampling_proba,
+                    self.negative_class: self.negative_weight * (1 - nominal_proba) / (1 - sampling_proba),
+                }
+            else:
+                self.estimator.class_weight = "balanced"
             self.estimator.fit(X_resampled, y_resampled)
             prev_sampling_proba, sampling_proba = sampling_proba, self.get_optimal_sampling_proba_(X, y)
             if abs(prev_sampling_proba - sampling_proba) < self.termination_tol:

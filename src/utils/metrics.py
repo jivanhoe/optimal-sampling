@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 from imblearn.metrics import sensitivity_score, specificity_score, geometric_mean_score
@@ -8,7 +8,12 @@ from sklearn.metrics import accuracy_score, precision_score, f1_score, roc_auc_s
 from algorithm.optimal_sampling import OptimalSamplingClassifier
 
 
-def performance_summary(clf: OptimalSamplingClassifier, X: np.ndarray, y: np.ndarray) -> Dict[str, float]:
+def performance_summary(
+        clf: OptimalSamplingClassifier,
+        X: np.ndarray,
+        y: np.ndarray,
+        info: Optional[Dict[str, any]] = None,
+) -> Dict[str, float]:
     predicted_proba = clf.predict_proba(X)
     if clf.use_decision_function:
         predicted_proba = (predicted_proba - predicted_proba.min()) / (predicted_proba.max() - predicted_proba.min())
@@ -30,5 +35,6 @@ def performance_summary(clf: OptimalSamplingClassifier, X: np.ndarray, y: np.nda
         brier_score=brier_score_loss(y, predicted_proba),
         jaccard_score=jaccard_score(y, predicted),
         weighted_loss=clf.weighted_loss(X, y).mean(),
-        cost=clf.cost(X, y).mean()
+        cost=clf.cost(X, y).mean(),
+        **(info if info else {})
     )
