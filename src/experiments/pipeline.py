@@ -24,19 +24,19 @@ def auc(clf: BaseEstimator, X: np.ndarray, y: np.ndarray) -> float:
 
 OUTPUT_PATH = "results_v2.csv"
 DATASETS = [
-    #"ecoli",
+    "ecoli",
     "sick_euthyroid",
-    #"car_eval_34",
-    # "us_crime",
-    # "yeast_ml8",
-    # "libras_move",
-    # "thyroid_sick",
-    # "solar_flare_m0",
-    # "wine_quality",
-    # "yeast_me2",
-    # "ozone_level",
-    # "mammography",
-    # "abalone_19"
+    "car_eval_34",
+    "us_crime",
+    "yeast_ml8",
+    "libras_move",
+    "thyroid_sick",
+    "solar_flare_m0",
+    "wine_quality",
+    "yeast_me2",
+    "ozone_level",
+    "mammography",
+    "abalone_19"
 ]
 ESTIMATORS = [
     LogisticRegressionCV(
