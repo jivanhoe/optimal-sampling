@@ -21,7 +21,7 @@ class OptimalSamplingClassifier(BaseEstimator):
             negative_weight: float = 1.0,
             positive_class: Union[int, bool] = True,
             negative_class: Union[int, bool] = False,
-            max_iter: int = 20,
+            max_iter: int = 50,
             max_change: float = 0.1,
             termination_tol: float = 1e-2,
             n_folds: float = 10,
@@ -78,7 +78,7 @@ class OptimalSamplingClassifier(BaseEstimator):
         nominal_proba = (y == self.positive_class).mean()
         odds = nominal_proba / (1 - nominal_proba)
         return float(np.clip(
-            1 - 1 / (odds * self.positive_weight / self.negative_weight + 1),
+            1 - 2 / (odds * self.positive_weight / self.negative_weight + 1),
             a_min=nominal_proba,
             a_max=0.5
         ))

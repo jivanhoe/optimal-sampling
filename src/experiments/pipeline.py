@@ -1,32 +1,32 @@
-from copy import deepcopy
-from typing import Dict, Optional, Union, NoReturn
 import time
+from typing import Dict, Union, NoReturn
 
 import numpy as np
 import pandas as pd
 from imblearn.datasets import fetch_datasets
-from sklearn.base import BaseEstimator
-from sklearn.linear_model import LogisticRegressionCV
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-from sklearn.tree import DecisionTreeClassifier
 from sklearn import preprocessing
+from sklearn.base import BaseEstimator
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.neural_network import MLPClassifier
+from sklearn.tree import DecisionTreeClassifier
+
 from algorithm.optimal_sampling import OptimalSamplingClassifier
-from utils.metrics import performance_summary
 from experiments.baselines import fit_sampling_baseline
+from utils.metrics import performance_summary
 
 
 def auc(clf: BaseEstimator, X: np.ndarray, y: np.ndarray) -> float:
     return roc_auc_score(y, clf.predict_proba(X)[:, 1])
 
 
-OUTPUT_PATH = "results.csv"
+OUTPUT_PATH = "results_v2.csv"
 DATASETS = [
     #"ecoli",
     "sick_euthyroid",
-    "car_eval_34",
+    #"car_eval_34",
     # "us_crime",
     # "yeast_ml8",
     # "libras_move",
@@ -71,7 +71,7 @@ ESTIMATORS = [
         random_state=42
     )
 ]
-COST_SCALINGS = [1, 2]
+COST_SCALINGS = [1, 5]
 
 
 def run_experiment(
@@ -97,13 +97,15 @@ def run_experiment(
     ):
 
         if verbose:
-            print(f"Running trial for fold {i+1}/ {n_folds}")
+            print(f"Running trial for fold {i+1}/{n_folds}")
 
         # Set up cross validation object
         clf = OptimalSamplingClassifier(
             estimator=estimator,
             positive_weight=cost_scaling / y[train].mean(),
+            max_change=0.15,
             n_folds=10,
+            max_iter=20,
             random_state=42,
             verbose=True
         )
@@ -114,7 +116,7 @@ def run_experiment(
         start_time = time.time()
         clf.fit(X=X[train], y=y[train])
         end_time = time.time()
-        optimal_sampling_time = start_time - end_time
+        optimal_sampling_time = end_time - start_time
 
         # Train nominal sampling baseline
         if verbose:
@@ -127,7 +129,7 @@ def run_experiment(
             sampling_proba=None
         )
         end_time = time.time()
-        nominal_sampling_time = start_time - end_time
+        nominal_sampling_time = end_time - start_time
 
         # Train balanced sampling baseline
         if verbose:
@@ -139,7 +141,7 @@ def run_experiment(
             sampling_proba=0.5
         )
         end_time = time.time()
-        balanced_sampling_time = start_time - end_time
+        balanced_sampling_time = end_time - start_time
 
         # Save results
         info = dict(
@@ -201,4 +203,3 @@ if __name__ == "__main__":
                         + f"and cost scaling {cost_scaling_}"
                     )
                 print("-" * 100)
-
