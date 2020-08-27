@@ -1,4 +1,4 @@
-from typing import Union, Optional, Callable, Tuple, NoReturn, List
+from typing import Union, Optional, Callable, Tuple
 
 import numpy as np
 from sklearn.base import BaseEstimator
@@ -24,10 +24,11 @@ class OptimalSamplingClassifier(BaseEstimator):
             max_iter: int = 50,
             max_change: float = 0.1,
             termination_tol: float = 1e-2,
-            n_folds: float = 10,
-            tune_threshold: bool = True,
+            n_folds: float = 5,
+            tune_threshold: bool = False,
             use_decision_function: bool = False,
             calibrate_class_weight: bool = True,
+            initial_guess: str = "balanced",
             refit: bool = True,
             verbose: bool = False,
             random_state: Optional[int] = None
@@ -45,8 +46,10 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.tune_threshold = tune_threshold
         self.use_decision_function = use_decision_function
         self.calibrate_class_weight = calibrate_class_weight
+        self.initial_guess = initial_guess
         self.refit = refit
         self.verbose = verbose
+        self.nominal_proba = None
         self.sampling_proba = None
         self.threshold = None
         self.random_state = random_state
@@ -75,13 +78,24 @@ class OptimalSamplingClassifier(BaseEstimator):
         return X[mask], y[mask]
 
     def make_initial_guess_(self, y: np.ndarray) -> float:
-        nominal_proba = (y == self.positive_class).mean()
-        odds = nominal_proba / (1 - nominal_proba)
-        return float(np.clip(
-            1 - 2 / (odds * self.positive_weight / self.negative_weight + 1),
-            a_min=nominal_proba,
-            a_max=0.5
-        ))
+        if self.initial_guess == "balanced":
+            return 0.5
+        elif self.initial_guess == "nominal":
+            return self.nominal_proba
+        elif self.initial_guess == "midpoint":
+            return (self.nominal_proba + 0.5) / 2
+        elif self.initial_guess == "auto":
+            odds = self.nominal_proba / (1 - self.nominal_proba)
+            return float(np.clip(
+                1 - 2 / (odds * self.positive_weight / self.negative_weight + 1),
+                a_min=self.nominal_proba,
+                a_max=0.5
+            ))
+        else:
+            raise NotImplementedError(
+                f"Unable to recognise initial guess strategy {self.initial_guess}"
+                " - please choose from balanced, nominal or auto."
+            )
 
     def estimate_optimal_sampling_proba_(
             self,
@@ -92,28 +106,26 @@ class OptimalSamplingClassifier(BaseEstimator):
     ) -> float:
 
         # Fit model on training data using incumbent sampling probability
-        nominal_proba = (y_train == self.positive_class).mean()
         X_resampled, y_resampled = self.resample_(X=X_train, y=y_train, sampling_proba=self.sampling_proba)
         self.estimator.fit(X=X_resampled, y=y_resampled)
 
         # Estimate optimal sampling probability on validation set
         positive_mask = y_val == self.positive_class
         loss = self.weighted_loss(X_val, y_val)
-        nominal_proba = positive_mask.mean()
-        return max(
-            1 - np.sqrt((1 - nominal_proba) * (loss ** 2 * ~positive_mask).mean()) / max(loss.mean(), 1e-10) - 1e-10,
-            nominal_proba
+        return np.clip(
+            1 - (1 - self.nominal_proba) * np.sqrt((loss[~positive_mask] ** 2).mean()) / max(loss.mean(), 1e-10),
+            a_min=self.nominal_proba,
+            a_max=1 - 1e-5
         )
 
     def estimate_optimal_decision_threshold_(self, X: np.ndarray, y: np.ndarray) -> float:
 
         # Resample data
-        nominal_proba = (y == self.positive_class).mean()
         X_resampled, y_resampled = self.resample_(X, y, sampling_proba=self.sampling_proba)
         sampling_weights = np.where(
             y_resampled == self.positive_class,
-            nominal_proba / self.sampling_proba,
-            (1 - nominal_proba) / (1 - self.sampling_proba)
+            self.nominal_proba / self.sampling_proba,
+            (1 - self.nominal_proba) / (1 - self.sampling_proba)
         )
 
         # Perform grid search for best threshold
@@ -127,17 +139,17 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.threshold = best_threshold
         return best_threshold
 
-    def fit(self, X: np.ndarray,  y: np.ndarray) -> NoReturn:
+    def fit(self, X: np.ndarray,  y: np.ndarray) -> None:
 
         # Set seed
         np.random.seed(self.random_state)
 
         # Initialize variables
+        self.nominal_proba = (y == self.positive_class).mean()
         self.sampling_proba = self.make_initial_guess_(y)
         prev_sampling_probas = []
         threshold_estimates = []
         terminate_early = False
-        nominal_proba = (y == self.positive_class).mean()
 
         for i in range(self.max_iter):
             if self.verbose:
@@ -145,8 +157,8 @@ class OptimalSamplingClassifier(BaseEstimator):
 
             # Recalibrate class weights used by model
             class_weight = {
-                self.positive_class: self.positive_weight * nominal_proba / self.sampling_proba,
-                self.negative_class: self.negative_weight * (1 - nominal_proba) / (1 - self.sampling_proba),
+                self.positive_class: self.positive_weight * self.nominal_proba / self.sampling_proba,
+                self.negative_class: self.negative_weight * (1 - self.nominal_proba) / (1 - self.sampling_proba),
             } if self.calibrate_class_weight else "balanced"
             if type(self.estimator) == GridSearchCV:
                 self.estimator.estimator.class_weight = class_weight

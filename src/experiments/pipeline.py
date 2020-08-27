@@ -22,10 +22,12 @@ def auc(clf: BaseEstimator, X: np.ndarray, y: np.ndarray) -> float:
     return roc_auc_score(y, clf.predict_proba(X)[:, 1])
 
 
-OUTPUT_PATH = "results_v2.csv"
+OUTPUT_PATH = "results_reruns.csv"
 DATASETS = [
     "ecoli",
+    "abalone",
     "sick_euthyroid",
+    "spectrometer",
     "car_eval_34",
     "us_crime",
     "yeast_ml8",
@@ -36,7 +38,9 @@ DATASETS = [
     "yeast_me2",
     "ozone_level",
     "mammography",
-    "abalone_19"
+    "abalone_19",
+    "spectrometer",
+    "arrhythmia"
 ]
 ESTIMATORS = [
     LogisticRegressionCV(
@@ -52,6 +56,7 @@ ESTIMATORS = [
             min_samples_leaf=5,
             random_state=42
         ),
+        scoring=auc,
         param_grid=dict(ccp_alpha=np.logspace(-5, -1, 10)),
         cv=5
     ),
@@ -71,7 +76,7 @@ ESTIMATORS = [
         random_state=42
     )
 ]
-COST_SCALINGS = [1, 5]
+COST_SCALINGS = [0.2, 0.5, 1, 2, 5]
 
 
 def run_experiment(
@@ -86,6 +91,8 @@ def run_experiment(
     # Process data
     X = preprocessing.scale(dataset["data"])
     y = dataset["target"] == 1
+    nominal_proba = y.mean()
+    positive_weight = (1 - nominal_proba) / nominal_proba * cost_scaling
 
     results = []
     for i, (train, test) in enumerate(
@@ -102,12 +109,13 @@ def run_experiment(
         # Set up cross validation object
         clf = OptimalSamplingClassifier(
             estimator=estimator,
-            positive_weight=cost_scaling / y[train].mean(),
-            max_change=0.15,
-            n_folds=10,
-            max_iter=20,
+            positive_weight=positive_weight,
+            max_change=0.1,
+            n_folds=5,
+            max_iter=10,
             random_state=42,
-            verbose=True
+            initial_guess="midpoint",
+            verbose=False
         )
 
         # Train model with optimal sampling
@@ -191,13 +199,13 @@ if __name__ == "__main__":
                         estimator=estimator_,
                         cost_scaling=cost_scaling_,
                         output_path=OUTPUT_PATH,
-                        verbose=True
+                        verbose=False
                     )
                     print(
-                        f"Completed experiment on {dataset_name} dataset with {estimator_} model "
+                        f"Completed experiment on {dataset_name} dataset with {type(estimator_)} model "
                         + f"and cost scaling {cost_scaling_}"
                     )
-                except:
+                except BlockingIOError:
                     print(
                         f"Error running experiment on {dataset_name} dataset with {estimator_} model "
                         + f"and cost scaling {cost_scaling_}"
