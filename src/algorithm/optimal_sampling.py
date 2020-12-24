@@ -3,7 +3,7 @@ from typing import Union, Optional, Callable, Tuple
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
-
+import time
 from utils.loss import select_loss
 from copy import deepcopy
 
@@ -52,6 +52,8 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.nominal_proba = None
         self.sampling_proba = None
         self.threshold = None
+        self.total_iter = 0
+        self.time_to_train = 0
         self.random_state = random_state
 
     def resample_(
@@ -143,13 +145,14 @@ class OptimalSamplingClassifier(BaseEstimator):
 
         # Set seed
         np.random.seed(self.random_state)
-
+        start_time = time.time()
         # Initialize variables
         self.nominal_proba = (y == self.positive_class).mean()
         self.sampling_proba = self.make_initial_guess_(y)
         prev_sampling_probas = []
         threshold_estimates = []
         terminate_early = False
+        iterations = 0
 
         for i in range(self.max_iter):
             if self.verbose:
@@ -208,7 +211,10 @@ class OptimalSamplingClassifier(BaseEstimator):
                 if abs(prev_sampling_probas[-2] - self.sampling_proba) < self.termination_tol:
                     self.sampling_proba = (prev_sampling_probas[-1] + self.sampling_proba) / 2
                     self.max_change = self.max_change / 2
-
+            iterations +=1
+        end_time = time.time()
+        self.time_to_train = start_time - end_time
+        self.total_iter = iterations
         # Set sampling probability and decision threshold
         self.threshold = np.mean(threshold_estimates) if self.tune_threshold else 0.5
 

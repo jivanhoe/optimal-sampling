@@ -4,6 +4,8 @@ from typing import Dict, Union, NoReturn
 import numpy as np
 import pandas as pd
 from imblearn.datasets import fetch_datasets
+from imblearn.over_sampling import SMOTE, ADASYN
+from imblearn.under_sampling import NearMiss, TomekLinks
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestClassifier
@@ -22,7 +24,7 @@ def auc(clf: BaseEstimator, X: np.ndarray, y: np.ndarray) -> float:
     return roc_auc_score(y, clf.predict_proba(X)[:, 1])
 
 
-OUTPUT_PATH = "results_reruns.csv"
+OUTPUT_PATH = "results.csv"
 DATASETS = [
     "ecoli",
     "abalone",
@@ -47,8 +49,8 @@ ESTIMATORS = [
         Cs=10,
         cv=5,
         scoring=auc,
-        max_iter=5000,
-        random_state=42
+        max_iter=10000,
+        random_state=100
     ),
     GridSearchCV(
         estimator=DecisionTreeClassifier(
@@ -125,7 +127,8 @@ def run_experiment(
         clf.fit(X=X[train], y=y[train])
         end_time = time.time()
         optimal_sampling_time = end_time - start_time
-
+        iterations = clf.total_iter
+        fit_time = clf.time_to_train
         # Train nominal sampling baseline
         if verbose:
             print("Training baseline model with nominal sampling")
@@ -138,6 +141,7 @@ def run_experiment(
         )
         end_time = time.time()
         nominal_sampling_time = end_time - start_time
+        start_time = time.time()
 
         # Train balanced sampling baseline
         if verbose:
@@ -150,6 +154,73 @@ def run_experiment(
         )
         end_time = time.time()
         balanced_sampling_time = end_time - start_time
+
+        # #Use SMOTE Oversampling technique
+        start_time = time.time()
+        if verbose:
+            print("Training baseline model with SMOTE")
+        X_train = X[train]
+        y_train = y[train]
+        sm = SMOTE()
+        X_resampled, y_resampled = sm.fit_resample(X_train, y_train)
+
+        smote_baseline_clf = fit_sampling_baseline(
+            clf=clf,
+            X=X_resampled,
+            y=y_resampled,
+            sampling_proba=None
+        )
+        end_time = time.time()
+        smote_sampling_time = end_time - start_time
+
+        # #Use Adaptive Synthetic Oversampling
+        if verbose:
+            print("Training baseline model with ADASYN")
+        start_time = time.time()
+        ad = ADASYN()
+        X_resampled, y_resampled = ad.fit_resample(X_train, y_train)
+
+        adasyn_baseline_clf = fit_sampling_baseline(
+            clf=clf,
+            X=X_resampled,
+            y=y_resampled,
+            sampling_proba=None
+        )
+        end_time = time.time()
+        adasyn_sampling_time = end_time - start_time
+
+        #Use Near Miss Undersampling
+        if verbose:
+            print("Training baseline model with Near Miss")
+        start_time = time.time()
+        nm = NearMiss()
+        X_resampled, y_resampled = nm.fit_resample(X_train, y_train)
+
+        nearmiss_baseline_clf = fit_sampling_baseline(
+            clf=clf,
+            X=X_resampled,
+            y=y_resampled,
+            sampling_proba=None
+        )
+        end_time = time.time()
+        nearmiss_sampling_time = end_time - start_time
+
+
+        #Use Tomeks Links
+        if verbose:
+            print("Training baseline model with Tomek's Links")
+        start_time = time.time()
+        tl = TomekLinks()
+        X_resampled, y_resampled = tl.fit_resample(X_train, y_train)
+
+        tomeklinks_baseline_clf = fit_sampling_baseline(
+            clf=clf,
+            X=X_resampled,
+            y=y_resampled,
+            sampling_proba=None
+        )
+        end_time = time.time()
+        tomeklinks_sampling_time = end_time - start_time
 
         # Save results
         info = dict(
@@ -164,8 +235,8 @@ def run_experiment(
                 clf=clf,
                 X=X[test],
                 y=y[test],
-                info=dict(**info, sampling_method="optimal", training_time=optimal_sampling_time)
-            ),
+                info=dict(**info, sampling_method="optimal", training_time=optimal_sampling_time, fit_time = fit_time, iter_to_converge = iterations)
+             ),
             performance_summary(
                 clf=nominal_baseline_clf,
                 X=X[test],
@@ -177,6 +248,30 @@ def run_experiment(
                 X=X[test],
                 y=y[test],
                 info=dict(**info, sampling_method="balanced", training_time=balanced_sampling_time)
+            ),
+            performance_summary(
+                clf=smote_baseline_clf,
+                X=X[test],
+                y=y[test],
+                info=dict(**info, sampling_method="smote", training_time=smote_sampling_time)
+            ),
+            performance_summary(
+                clf=adasyn_baseline_clf,
+                X=X[test],
+                y=y[test],
+                info=dict(**info, sampling_method="adasyn", training_time=adasyn_sampling_time)
+            ),
+            performance_summary(
+                clf=nearmiss_baseline_clf,
+                X=X[test],
+                y=y[test],
+                info=dict(**info, sampling_method="nearmiss", training_time=nearmiss_sampling_time)
+            ),
+            performance_summary(
+                clf=tomeklinks_baseline_clf,
+                X=X[test],
+                y=y[test],
+                info=dict(**info, sampling_method="tomeklink", training_time=tomeklinks_sampling_time)
             )
         ]
 

@@ -3,7 +3,7 @@ from typing import Dict, Optional
 import numpy as np
 from imblearn.metrics import sensitivity_score, specificity_score, geometric_mean_score
 from sklearn.metrics import accuracy_score, precision_score, f1_score, roc_auc_score, average_precision_score, \
-    brier_score_loss, jaccard_score
+    brier_score_loss, jaccard_score, recall_score
 
 from algorithm.optimal_sampling import OptimalSamplingClassifier
 
@@ -24,11 +24,12 @@ def performance_summary(
         class_ratio=1 / nominal_proba,
         weight_ratio=clf.positive_weight / clf.negative_weight,
         sampling_ratio=clf.sampling_proba / nominal_proba,
-        #accuracy=accuracy_score(y, predicted),
-        #sensitivity=sensitivity_score(y, predicted),
-        #specificity=specificity_score(y, predicted),
-        #precision=precision_score(y, predicted) if (predicted == clf.positive_class).sum() > 0 else None,
-        #f1_score=f1_score(y, predicted),
+        accuracy=accuracy_score(y, predicted),
+        sensitivity=sensitivity_score(y, predicted),
+        specificity=specificity_score(y, predicted),
+        precision=precision_score(y, predicted) if (predicted == clf.positive_class).sum() > 0 else None,
+        recall=recall_score(y, predicted) if (predicted == clf.positive_class).sum() > 0 else None,
+        f1_score=f1_score(y, predicted),
         #geometric_mean_score=geometric_mean_score(y, predicted),
         roc_auc_score=roc_auc_score(y, predicted_proba),
         average_precision_score=average_precision_score(y, predicted_proba),
