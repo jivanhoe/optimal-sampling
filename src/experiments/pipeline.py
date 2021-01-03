@@ -1,4 +1,6 @@
-import time
+
+import ssl
+from copy import deepcopy
 from typing import Dict, Union, NoReturn
 
 import numpy as np
@@ -10,55 +12,52 @@ from sklearn import preprocessing
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegressionCV
-from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 
 from algorithm.optimal_sampling import OptimalSamplingClassifier
-from experiments.baselines import fit_sampling_baseline
+from experiments.baseline import fit_sampling_baseline
 from utils.metrics import performance_summary
 
-
-def auc(clf: BaseEstimator, X: np.ndarray, y: np.ndarray) -> float:
-    return roc_auc_score(y, clf.predict_proba(X)[:, 1])
-
+ssl._create_default_https_context = ssl._create_unverified_context
 
 OUTPUT_PATH = "results.csv"
 DATASETS = [
     "ecoli",
-    "abalone",
-    "sick_euthyroid",
-    "spectrometer",
-    "car_eval_34",
-    "us_crime",
-    "yeast_ml8",
-    "libras_move",
-    "thyroid_sick",
-    "solar_flare_m0",
-    "wine_quality",
-    "yeast_me2",
-    "ozone_level",
-    "mammography",
-    "abalone_19",
-    "spectrometer",
-    "arrhythmia"
+    # "abalone",
+    # "sick_euthyroid",
+    # "spectrometer",
+    # "car_eval_34",
+    # "us_crime",
+    # "yeast_ml8",
+    # "libras_move",
+    # "thyroid_sick",
+    # "solar_flare_m0",
+    # "wine_quality",
+    # "yeast_me2",
+    # "ozone_level",
+    # "mammography",
+    # "abalone_19",
+    # "spectrometer",
+    # "arrhythmia"
 ]
 ESTIMATORS = [
     LogisticRegressionCV(
         Cs=10,
         cv=5,
-        scoring=auc,
-        max_iter=10000,
-        random_state=100
+        scoring="neg_log_loss",
+        max_iter=2000,
+        random_state=0
     ),
     GridSearchCV(
         estimator=DecisionTreeClassifier(
-            max_depth=5,
+            max_depth=10,
             min_samples_leaf=5,
-            random_state=42
+            criterion="entropy",
+            random_state=0
         ),
-        scoring=auc,
+        scoring="neg_log_loss",
         param_grid=dict(ccp_alpha=np.logspace(-5, -1, 10)),
         cv=5
     ),
@@ -67,7 +66,8 @@ ESTIMATORS = [
         min_samples_leaf=5,
         max_samples=0.5,
         max_features="sqrt",
-        random_state=42
+        criterion="entropy",
+        random_state=0
     ),
     MLPClassifier(
         hidden_layer_sizes=[64, 32],
@@ -75,10 +75,10 @@ ESTIMATORS = [
         max_iter=2000,
         early_stopping=True,
         validation_fraction=0.2,
-        random_state=42
+        random_state=0
     )
 ]
-COST_SCALINGS = [0.2, 0.5, 1, 2, 5]
+COST_SCALINGS = [0.1, 0.2, 0.5, 1, 2, 5, 10]
 
 
 def run_experiment(
@@ -87,7 +87,7 @@ def run_experiment(
         estimator: BaseEstimator,
         cost_scaling: float = 1.0,
         n_folds: int = 5,
-        verbose: bool = False
+        verbose: bool = True
 ) -> NoReturn:
 
     # Process data
@@ -96,131 +96,28 @@ def run_experiment(
     nominal_proba = y.mean()
     positive_weight = (1 - nominal_proba) / nominal_proba * cost_scaling
 
+    # Initialize classifier
+    clf = OptimalSamplingClassifier(
+        estimator=estimator,
+        positive_weight=positive_weight,
+        max_change=0.1,
+        n_folds=5,
+        max_iter=10,
+        random_state=0,
+        verbose=False
+    )
+
     results = []
     for i, (train, test) in enumerate(
         StratifiedKFold(
             n_splits=n_folds,
             shuffle=True,
-            random_state=42
+            random_state=0
         ).split(X, y)
     ):
 
         if verbose:
             print(f"Running trial for fold {i+1}/{n_folds}")
-
-        # Set up cross validation object
-        clf = OptimalSamplingClassifier(
-            estimator=estimator,
-            positive_weight=positive_weight,
-            max_change=0.1,
-            n_folds=5,
-            max_iter=10,
-            random_state=42,
-            initial_guess="midpoint",
-            verbose=False
-        )
-
-        # Train model with optimal sampling
-        if verbose:
-            print("Training model with optimal sampling")
-        start_time = time.time()
-        clf.fit(X=X[train], y=y[train])
-        end_time = time.time()
-        optimal_sampling_time = end_time - start_time
-        iterations = clf.total_iter
-        fit_time = clf.time_to_train
-        # Train nominal sampling baseline
-        if verbose:
-            print("Training baseline model with nominal sampling")
-        start_time = time.time()
-        nominal_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X[train],
-            y=y[train],
-            sampling_proba=None
-        )
-        end_time = time.time()
-        nominal_sampling_time = end_time - start_time
-        start_time = time.time()
-
-        # Train balanced sampling baseline
-        if verbose:
-            print("Training baseline model with balanced sampling")
-        balanced_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X[train],
-            y=y[train],
-            sampling_proba=0.5
-        )
-        end_time = time.time()
-        balanced_sampling_time = end_time - start_time
-
-        # #Use SMOTE Oversampling technique
-        start_time = time.time()
-        if verbose:
-            print("Training baseline model with SMOTE")
-        X_train = X[train]
-        y_train = y[train]
-        sm = SMOTE()
-        X_resampled, y_resampled = sm.fit_resample(X_train, y_train)
-
-        smote_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X_resampled,
-            y=y_resampled,
-            sampling_proba=None
-        )
-        end_time = time.time()
-        smote_sampling_time = end_time - start_time
-
-        # #Use Adaptive Synthetic Oversampling
-        if verbose:
-            print("Training baseline model with ADASYN")
-        start_time = time.time()
-        ad = ADASYN()
-        X_resampled, y_resampled = ad.fit_resample(X_train, y_train)
-
-        adasyn_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X_resampled,
-            y=y_resampled,
-            sampling_proba=None
-        )
-        end_time = time.time()
-        adasyn_sampling_time = end_time - start_time
-
-        #Use Near Miss Undersampling
-        if verbose:
-            print("Training baseline model with Near Miss")
-        start_time = time.time()
-        nm = NearMiss()
-        X_resampled, y_resampled = nm.fit_resample(X_train, y_train)
-
-        nearmiss_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X_resampled,
-            y=y_resampled,
-            sampling_proba=None
-        )
-        end_time = time.time()
-        nearmiss_sampling_time = end_time - start_time
-
-
-        #Use Tomeks Links
-        if verbose:
-            print("Training baseline model with Tomek's Links")
-        start_time = time.time()
-        tl = TomekLinks()
-        X_resampled, y_resampled = tl.fit_resample(X_train, y_train)
-
-        tomeklinks_baseline_clf = fit_sampling_baseline(
-            clf=clf,
-            X=X_resampled,
-            y=y_resampled,
-            sampling_proba=None
-        )
-        end_time = time.time()
-        tomeklinks_sampling_time = end_time - start_time
 
         # Save results
         info = dict(
@@ -230,50 +127,42 @@ def run_experiment(
             n_training_samples=y[train].shape[0],
             fold=i
         )
-        results += [
-            performance_summary(
-                clf=clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="optimal", training_time=optimal_sampling_time, fit_time = fit_time, iter_to_converge = iterations)
-             ),
-            performance_summary(
-                clf=nominal_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="nominal", training_time=nominal_sampling_time)
-            ),
-            performance_summary(
-                clf=balanced_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="balanced", training_time=balanced_sampling_time)
-            ),
-            performance_summary(
-                clf=smote_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="smote", training_time=smote_sampling_time)
-            ),
-            performance_summary(
-                clf=adasyn_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="adasyn", training_time=adasyn_sampling_time)
-            ),
-            performance_summary(
-                clf=nearmiss_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="nearmiss", training_time=nearmiss_sampling_time)
-            ),
-            performance_summary(
-                clf=tomeklinks_baseline_clf,
-                X=X[test],
-                y=y[test],
-                info=dict(**info, sampling_method="tomeklink", training_time=tomeklinks_sampling_time)
+        for sampling_method, resampler, sampling_proba in [
+            ("optimal", None, None),
+            ("nominal", None, None),
+            ("balanced", None, 0.5),
+            ("smote", SMOTE(), None),
+            ("adasyn", ADASYN(), None),
+            ("near_miss", NearMiss(), None),
+            ("tomeks_links", TomekLinks(), None),
+        ]:
+            if verbose:
+                print(f"Training model with {sampling_method} sampling")
+            if sampling_method == "optimal":
+                clf_copy = deepcopy(clf)
+                clf_copy.fit(X[train], y[train])
+            else:
+                clf_copy = fit_sampling_baseline(
+                    clf=clf,
+                    X=X[train],
+                    y=y[train],
+                    sampling_proba=sampling_proba,
+                    resampler=resampler
+                )
+            results.append(
+                performance_summary(
+                    clf=clf_copy,
+                    X=X[test],
+                    y=y[test],
+                    info=dict(
+                        **info,
+                        sampling_method=sampling_method,
+                        total_train_time=clf_copy._total_train_time,
+                        fit_time=clf_copy._fit_time,
+                        iter_to_converge=clf._iter_count if sampling_method == "optimal" else None
+                    )
+                )
             )
-        ]
 
     # Save results
     try:
@@ -294,7 +183,7 @@ if __name__ == "__main__":
                         estimator=estimator_,
                         cost_scaling=cost_scaling_,
                         output_path=OUTPUT_PATH,
-                        verbose=False
+                        verbose=True
                     )
                     print(
                         f"Completed experiment on {dataset_name} dataset with {type(estimator_)} model "
@@ -302,7 +191,7 @@ if __name__ == "__main__":
                     )
                 except BlockingIOError:
                     print(
-                        f"Error running experiment on {dataset_name} dataset with {estimator_} model "
+                        f"Error running experiment on {dataset_name} dataset with {type(estimator_)} model "
                         + f"and cost scaling {cost_scaling_}"
                     )
                 print("-" * 100)
