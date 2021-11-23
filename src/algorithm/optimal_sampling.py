@@ -100,7 +100,7 @@ class OptimalSamplingClassifier(BaseEstimator):
         else:
             raise NotImplementedError(
                 f"Unable to recognise initial guess strategy {self.initial_guess}"
-                " - please choose from balanced, nominal or auto."
+                " - please choose from balanced, nominal, midpoint, or auto."
             )
 
     def _estimate_optimal_sampling_proba(
