@@ -22,32 +22,32 @@ from utils.metrics import performance_summary
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-OUTPUT_PATH = "results.csv"
+OUTPUT_PATH = "results2.csv"
 DATASETS = [
-    "ecoli",
-    # "abalone",
-    # "sick_euthyroid",
-    # "spectrometer",
-    # "car_eval_34",
-    # "us_crime",
-    # "yeast_ml8",
-    # "libras_move",
-    # "thyroid_sick",
-    # "solar_flare_m0",
-    # "wine_quality",
-    # "yeast_me2",
-    # "ozone_level",
-    # "mammography",
-    # "abalone_19",
-    # "spectrometer",
-    # "arrhythmia"
+    #"ecoli",
+    #"abalone",
+    #"sick_euthyroid",
+    #"spectrometer",
+    #"car_eval_34",
+    "us_crime",
+    "yeast_ml8",
+    "libras_move",
+    "thyroid_sick",
+    "solar_flare_m0",
+    "wine_quality",
+    "yeast_me2",
+    "ozone_level",
+    "mammography",
+    "abalone_19",
+    "spectrometer",
+    "arrhythmia"
 ]
 ESTIMATORS = [
     LogisticRegressionCV(
         Cs=10,
         cv=5,
         scoring="neg_log_loss",
-        max_iter=2000,
+        max_iter=10000,
         random_state=0
     ),
     GridSearchCV(
@@ -159,10 +159,13 @@ def run_experiment(
                         sampling_method=sampling_method,
                         total_train_time=clf_copy._total_train_time,
                         fit_time=clf_copy._fit_time,
-                        iter_to_converge=clf._iter_count if sampling_method == "optimal" else None
+                        iter_to_converge=clf_copy._iter_count if sampling_method == "optimal" else None
                     )
                 )
             )
+            print(f"Total train time: {clf_copy._total_train_time}")
+            print(f"Total fit time: {clf_copy._fit_time}")
+            print(f"Total iterations: {clf_copy._iter_count}")
 
     # Save results
     try:

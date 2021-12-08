@@ -44,7 +44,7 @@ def fit_sampling_baseline(
     fit_start_time = time.time()
     baseline_clf.estimator.fit(X, y)
     baseline_clf._threshold = baseline_clf.negative_weight / (baseline_clf.positive_weight + baseline_clf.negative_weight)
-    baseline_clf._fit_time = fit_start_time - time.time()
-    baseline_clf._total_train_time  = train_start_time - time.time()
+    baseline_clf._fit_time = time.time() - fit_start_time
+    baseline_clf._total_train_time  = time.time() - train_start_time
 
     return baseline_clf
