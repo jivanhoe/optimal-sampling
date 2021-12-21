@@ -22,13 +22,13 @@ from utils.metrics import performance_summary
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-OUTPUT_PATH = "results2.csv"
+OUTPUT_PATH = "results4.csv"
 DATASETS = [
-    #"ecoli",
-    #"abalone",
-    #"sick_euthyroid",
-    #"spectrometer",
-    #"car_eval_34",
+    "ecoli",
+    "abalone",
+    "sick_euthyroid",
+    "spectrometer",
+    "car_eval_34",
     "us_crime",
     "yeast_ml8",
     "libras_move",
@@ -43,13 +43,13 @@ DATASETS = [
     "arrhythmia"
 ]
 ESTIMATORS = [
-    LogisticRegressionCV(
-        Cs=10,
-        cv=5,
-        scoring="neg_log_loss",
-        max_iter=10000,
-        random_state=0
-    ),
+    # LogisticRegressionCV(
+    #     Cs=10,
+    #     cv=5,
+    #     scoring="neg_log_loss",
+    #     max_iter=10000,
+    #     random_state=0
+    # ),
     GridSearchCV(
         estimator=DecisionTreeClassifier(
             max_depth=10,
@@ -78,7 +78,7 @@ ESTIMATORS = [
         random_state=0
     )
 ]
-COST_SCALINGS = [0.1, 0.2, 0.5, 1, 2, 5, 10]
+COST_SCALINGS = [0.01,0.1, 0.5, 1, 2, 10, 100]
 
 
 def run_experiment(
@@ -158,15 +158,13 @@ def run_experiment(
                         **info,
                         sampling_method=sampling_method,
                         total_train_time=clf_copy._total_train_time,
-                        fit_time=clf_copy._fit_time,
-                        iter_to_converge=clf_copy._iter_count if sampling_method == "optimal" else None
+                        fit_time=clf_copy._fit_time
                     )
                 )
             )
             print(f"Total train time: {clf_copy._total_train_time}")
             print(f"Total fit time: {clf_copy._fit_time}")
             print(f"Total iterations: {clf_copy._iter_count}")
-
     # Save results
     try:
         results_df = pd.concat([pd.read_csv(output_path, index_col=0), pd.DataFrame(results)])
