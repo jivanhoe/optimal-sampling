@@ -22,6 +22,8 @@ def performance_summary(
         class_ratio=1 / nominal_proba,
         weight_ratio=clf.positive_weight / clf.negative_weight,
         sampling_probability=clf._sampling_proba,
+        previous_probabilities = clf._prev_sampling_probas,
+        cross_val_probabilities = clf._cross_val_sampling_probas,
         sampling_ratio=clf._sampling_proba / nominal_proba,
         iter_to_converge=clf._iter_count,
         accuracy=accuracy_score(y, predicted),

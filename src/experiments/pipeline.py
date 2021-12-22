@@ -22,7 +22,7 @@ from utils.metrics import performance_summary
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-OUTPUT_PATH = "results4.csv"
+OUTPUT_PATH = "results.csv"
 DATASETS = [
     "ecoli",
     "abalone",
@@ -78,8 +78,7 @@ ESTIMATORS = [
         random_state=0
     )
 ]
-COST_SCALINGS = [0.01,0.1, 0.5, 1, 2, 10, 100]
-
+COST_SCALINGS = [0.01, 0.1, 0.5, 1.0, 2.0, 10.0, 100.0]
 
 def run_experiment(
         dataset: Dict[str, Union[np.ndarray, str]],
@@ -165,6 +164,7 @@ def run_experiment(
             print(f"Total train time: {clf_copy._total_train_time}")
             print(f"Total fit time: {clf_copy._fit_time}")
             print(f"Total iterations: {clf_copy._iter_count}")
+            print(f"Final Sampling Probability: {clf_copy._sampling_proba}")
     # Save results
     try:
         results_df = pd.concat([pd.read_csv(output_path, index_col=0), pd.DataFrame(results)])

@@ -53,6 +53,8 @@ class OptimalSamplingClassifier(BaseEstimator):
         self.refit = refit
         self.verbose = verbose
         self.random_state = random_state
+        self._cross_val_sampling_probas = None
+        self._prev_sampling_probas = None
         self._nominal_proba = None
         self._sampling_proba = None
         self._threshold = None
@@ -75,7 +77,7 @@ class OptimalSamplingClassifier(BaseEstimator):
 
         # Select random subset of negative samples
         n_samples = y.shape[0]
-        n_negative_samples = int(np.ceil(n_samples * np.mean(positive_mask) / sampling_proba * (1 - sampling_proba)))
+        n_negative_samples = max(int(np.ceil(n_samples * np.mean(positive_mask) / sampling_proba * (1 - sampling_proba))), 2)
         negative_mask = np.zeros(n_samples, dtype=bool)
         negative_mask[np.random.permutation(np.argwhere(~positive_mask))[:n_negative_samples]] = True
 
@@ -110,7 +112,6 @@ class OptimalSamplingClassifier(BaseEstimator):
             X_val: np.ndarray,
             y_val: np.ndarray,
     ) -> float:
-
         # Fit model on training data using incumbent sampling probability
         X_resampled, y_resampled = self._resample(X=X_train, y=y_train, sampling_proba=self._sampling_proba)
         fit_start_time = time.time()
@@ -122,13 +123,14 @@ class OptimalSamplingClassifier(BaseEstimator):
         loss = self.weighted_loss(X_val, y_val)
         sampling_proba = 1 - (1 - self._nominal_proba) * np.sqrt((loss[~positive_mask] ** 2).mean()) / loss.mean()
         alt_sampling_proba = self._nominal_proba * np.sqrt((loss[positive_mask] ** 2).mean()) / loss.mean()
-        return float(
+        chosen_sampling_proba = float(
             np.clip(
                 sampling_proba if sampling_proba >= self._nominal_proba else alt_sampling_proba,
                 a_min=self.rounding_tol,
                 a_max=1 - self.rounding_tol
             )
         )
+        return chosen_sampling_proba
 
     def fit(self, X: np.ndarray,  y: np.ndarray) -> None:
 
@@ -141,7 +143,8 @@ class OptimalSamplingClassifier(BaseEstimator):
         self._total_train_time = 0
         self._fit_time = 0
         self._iter_count = 0
-        prev_sampling_probas = []
+        self._prev_sampling_probas = []
+        self._cross_val_sampling_probas = []
         train_start_time = time.time()
 
         for i in range(self.max_iter):
@@ -176,22 +179,22 @@ class OptimalSamplingClassifier(BaseEstimator):
                         y_val=y[val]
                     )
                 )
-
+            self._cross_val_sampling_probas.append(updated_sampling_proba_estimates)
             # Update sampling probability for next iteration
-            prev_sampling_probas.append(deepcopy(self._sampling_proba))
+            self._prev_sampling_probas.append(deepcopy(self._sampling_proba))
             self._sampling_proba = np.clip(
                 np.mean(updated_sampling_proba_estimates),
-                a_min=prev_sampling_probas[-1] - self.max_change,
-                a_max=prev_sampling_probas[-1] + self.max_change
+                a_min=self._prev_sampling_probas[-1] - self.max_change,
+                a_max=self._prev_sampling_probas[-1] + self.max_change
             )
 
             # Check termination condition
-            if abs(prev_sampling_probas[-1] - self._sampling_proba) < self.termination_tol:
+            if abs(self._prev_sampling_probas[-1] - self._sampling_proba) < self.termination_tol:
                 break
-            elif len(prev_sampling_probas) > 1:
+            elif len(self._prev_sampling_probas) > 1:
                 # Check for oscillation
-                if abs(prev_sampling_probas[-2] - self._sampling_proba) < self.termination_tol:
-                    self._sampling_proba = (prev_sampling_probas[-1] + self._sampling_proba) / 2
+                if abs(self._prev_sampling_probas[-2] - self._sampling_proba) < self.termination_tol:
+                    self._sampling_proba = (self._prev_sampling_probas[-1] + self._sampling_proba) / 2
                     self.max_change = self.max_change / 2
 
         # Refit model
