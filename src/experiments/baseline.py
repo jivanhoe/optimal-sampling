@@ -43,8 +43,17 @@ def fit_sampling_baseline(
     # Fit model
     fit_start_time = time.time()
     baseline_clf.estimator.fit(X, y)
-    baseline_clf._threshold = baseline_clf.negative_weight / (baseline_clf.positive_weight + baseline_clf.negative_weight)
+    #baseline_clf._threshold = baseline_clf.negative_weight / (baseline_clf.positive_weight + baseline_clf.negative_weight)
+    best_threshold = 0
+    best_cost = 1e12
+    for threshold in np.arange(0.01, 1.0, 0.01):
+        baseline_clf._threshold = threshold
+        new_cost = baseline_clf.cost(X, y).mean()
+        if new_cost < best_cost:
+            best_cost = new_cost
+            best_threshold = threshold
+    baseline_clf._threshold = best_threshold
     baseline_clf._fit_time = time.time() - fit_start_time
-    baseline_clf._total_train_time  = time.time() - train_start_time
+    baseline_clf._total_train_time = time.time() - train_start_time
 
     return baseline_clf

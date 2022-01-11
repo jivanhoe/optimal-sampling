@@ -77,7 +77,7 @@ class OptimalSamplingClassifier(BaseEstimator):
 
         # Select random subset of negative samples
         n_samples = y.shape[0]
-        n_negative_samples = max(int(np.ceil(n_samples * np.mean(positive_mask) / sampling_proba * (1 - sampling_proba))), 2)
+        n_negative_samples = max(int(np.ceil(n_samples * np.mean(positive_mask) / sampling_proba * (1 - sampling_proba))), 2* self.n_folds)
         negative_mask = np.zeros(n_samples, dtype=bool)
         negative_mask[np.random.permutation(np.argwhere(~positive_mask))[:n_negative_samples]] = True
 
@@ -203,7 +203,15 @@ class OptimalSamplingClassifier(BaseEstimator):
             self.estimator.fit(X=X_resampled, y=y_resampled)
 
         # Set threshold
-        self._threshold = self.negative_weight / (self.negative_weight + self.positive_weight)
+        best_threshold = 0
+        best_cost = 1e12
+        for threshold in np.arange(0.01, 1.0, 0.01):
+            self._threshold = threshold
+            new_cost = self.cost(X, y).mean()
+            if new_cost < best_cost:
+                best_cost = new_cost
+                best_threshold = threshold
+        self._threshold = best_threshold
 
         # Compute training time
         self._total_train_time = time.time() - train_start_time

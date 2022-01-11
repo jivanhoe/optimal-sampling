@@ -22,7 +22,7 @@ from utils.metrics import performance_summary
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
-OUTPUT_PATH = "results.csv"
+OUTPUT_PATH = "results_cost_tuning.csv"
 DATASETS = [
     "ecoli",
     "abalone",
