@@ -5,6 +5,8 @@ from typing import Optional
 import numpy as np
 from imblearn.base import BaseSampler
 
+from sklearn.model_selection import train_test_split
+
 from algorithm.optimal_sampling import OptimalSamplingClassifier
 
 
@@ -22,7 +24,10 @@ def fit_sampling_baseline(
     # Get train start time
     train_start_time = time.time()
 
-    # Resample
+    # Create a new train/validation set to tune the thresholds on the holdout data
+    X, X_val, y, y_val = train_test_split(X, y, test_size=0.25, shuffle=True, stratify=y)
+
+    # Resample training set only
     nominal_proba = (y == baseline_clf.positive_class).mean()
     if sampling_proba:
         X, y = baseline_clf._resample(X, y, sampling_proba=sampling_proba)
@@ -43,12 +48,13 @@ def fit_sampling_baseline(
     # Fit model
     fit_start_time = time.time()
     baseline_clf.estimator.fit(X, y)
-    #baseline_clf._threshold = baseline_clf.negative_weight / (baseline_clf.positive_weight + baseline_clf.negative_weight)
+
+    #Tune threshold on validation set
     best_threshold = 0
     best_cost = 1e12
     for threshold in np.arange(0.01, 1.0, 0.01):
         baseline_clf._threshold = threshold
-        new_cost = baseline_clf.cost(X, y).mean()
+        new_cost = baseline_clf.cost(X_val, y_val).mean()
         if new_cost < best_cost:
             best_cost = new_cost
             best_threshold = threshold

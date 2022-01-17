@@ -5,7 +5,7 @@ from typing import Union, Optional, Callable, Tuple
 
 import numpy as np
 from sklearn.base import BaseEstimator
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.model_selection import StratifiedKFold, GridSearchCV, train_test_split
 
 from utils.loss import select_loss
 
@@ -197,9 +197,12 @@ class OptimalSamplingClassifier(BaseEstimator):
                     self._sampling_proba = (self._prev_sampling_probas[-1] + self._sampling_proba) / 2
                     self.max_change = self.max_change / 2
 
+        # Create a new train/validation set to tune the thresholds on the holdout data
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.25, shuffle=True, stratify=y)
+
         # Refit model
         if self.refit:
-            X_resampled, y_resampled = self._resample(X, y, sampling_proba=self._sampling_proba)
+            X_resampled, y_resampled = self._resample(X_train, y_train, sampling_proba=self._sampling_proba)
             self.estimator.fit(X=X_resampled, y=y_resampled)
 
         # Set threshold
@@ -207,7 +210,7 @@ class OptimalSamplingClassifier(BaseEstimator):
         best_cost = 1e12
         for threshold in np.arange(0.01, 1.0, 0.01):
             self._threshold = threshold
-            new_cost = self.cost(X, y).mean()
+            new_cost = self.cost(X_val, y_val).mean()
             if new_cost < best_cost:
                 best_cost = new_cost
                 best_threshold = threshold
